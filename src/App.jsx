@@ -3,6 +3,7 @@ import { SignupScreen } from './components/onboarding/Signup.jsx';
 import { SignInScreen } from './components/onboarding/SignInScreen.jsx';
 import { OTPScreen } from './components/onboarding/OTPScreen.jsx';
 import { ProfileSetup } from './components/profile/ProfileSetup.jsx';
+import { Dashboard } from './components/dashboard/Dashboard.jsx';
 import * as userApi from './api/userApi.js';
 
 const FontStyles = () => (
@@ -37,18 +38,27 @@ export default function App() {
       )}
       {view === 'signin' && (
         <SignInScreen
-          onLoginSuccess={() => setView('profile')}
+          onLoginSuccess={() => setView('dashboard')}
           onForgotPassword={() => setView('otp')}
           onSignup={() => setView('signup')}
         />
       )}
       {view === 'otp' && (
-        <OTPScreen onVerify={() => setView('profile')} onBack={() => setView('signin')} />
+        <OTPScreen onVerify={() => setView('dashboard')} onBack={() => setView('signin')} />
       )}
       {view === 'profile' && (
         <ProfileSetup
-          onComplete={() => setView('signin')}
+          onComplete={() => setView('dashboard')}
           onBack={() => setView('signin')}
+        />
+      )}
+      {view === 'dashboard' && (
+        <Dashboard
+          onLogout={() => {
+            localStorage.removeItem('rumi_user_id');
+            setView('signin');
+          }}
+          onEditProfile={() => setView('profile')}
         />
       )}
     </div>

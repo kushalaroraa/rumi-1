@@ -58,6 +58,8 @@ export const SignupScreen = ({ onNext, onLogin }) => {
           <div className="h-px bg-slate-200 flex-1"></div>
         </div>
 
+        <p className="mb-4 text-sm text-slate-500">Use any email and password for now — no verification.</p>
+
         {/* Inputs */}
         <div className="space-y-4">
           <div>

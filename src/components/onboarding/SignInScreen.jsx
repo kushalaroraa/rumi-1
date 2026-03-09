@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { AuthLayout } from './AuthLayout.jsx';
+import { OTPScreen } from './OTPScreen.jsx';
+import * as userApi from '../../api/userApi.js';
 
 // Mock icons
 const GoogleIcon = () => (
@@ -24,14 +26,31 @@ const AppleIcon = () => (
 export const SignInScreen = ({ onLoginSuccess, onForgotPassword, onSignup }) => {
   const [mode, setMode] = useState('password');
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('demo@rumi.com');
+  const [password, setPassword] = useState('demo123');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (mode === 'password') {
-      onLoginSuccess();
-    } else if (mode === 'otp-request') {
+    setError('');
+    if (mode === 'otp-request') {
       setMode('otp-verify');
+      return;
+    }
+    if (mode === 'password') {
+      setLoading(true);
+      try {
+        const res = await userApi.login(email.trim(), password);
+        if (res.user?._id) {
+          localStorage.setItem('rumi_user_id', res.user._id);
+          onLoginSuccess();
+        } else setError('Sign in failed.');
+      } catch (err) {
+        setError(err.message || 'Invalid email or password.');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -75,6 +94,18 @@ export const SignInScreen = ({ onLoginSuccess, onForgotPassword, onSignup }) => 
           </div>
         )}
 
+        {mode === 'password' && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-800">
+            <strong>Demo:</strong> Use <code className="bg-amber-100 px-1 rounded">demo@rumi.com</code> / <code className="bg-amber-100 px-1 rounded">demo123</code>
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">Email or Phone Number</label>
           <div className="relative">
@@ -106,6 +137,8 @@ export const SignInScreen = ({ onLoginSuccess, onForgotPassword, onSignup }) => 
               <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input 
                 type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter password"
                 className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-[#4E668A] focus:ring-4 focus:ring-[#4E668A]/10 transition-all outline-none text-slate-900 placeholder:text-slate-400"
                 required
@@ -123,9 +156,10 @@ export const SignInScreen = ({ onLoginSuccess, onForgotPassword, onSignup }) => 
 
         <button 
           type="submit"
-          className="w-full py-3.5 px-4 bg-[#081A35] text-white rounded-xl font-semibold hover:bg-[#081A35]/90 transition-all shadow-lg shadow-blue-900/10 mt-6 flex items-center justify-center gap-2"
+          disabled={loading}
+          className="w-full py-3.5 px-4 bg-[#081A35] text-white rounded-xl font-semibold hover:bg-[#081A35]/90 transition-all shadow-lg shadow-blue-900/10 mt-6 flex items-center justify-center gap-2 disabled:opacity-50"
         >
-          {mode === 'password' ? 'Sign In' : 'Send Code'} {mode === 'otp-request' && <ArrowRight size={18} />}
+          {loading ? 'Signing in…' : (mode === 'password' ? 'Sign In' : 'Send Code')} {mode === 'otp-request' && !loading && <ArrowRight size={18} />}
         </button>
 
         <div className="space-y-4 mt-6 text-center">

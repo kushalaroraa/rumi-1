@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import {
+  login,
   register,
   createProfile,
   getProfile,
@@ -59,6 +60,7 @@ const uploadProfileMulter = multer({
 
 const router = express.Router();
 
+router.post('/login', login);
 router.post('/register', register);
 router.post('/create-profile', createProfile);
 router.get('/profile/:userId?', getProfile);

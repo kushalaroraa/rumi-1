@@ -33,6 +33,31 @@ function getVerificationStatus(user) {
   return 'pending';
 }
 
+const DEMO_EMAIL = 'demo@rumi.com';
+const DEMO_PASSWORD = 'demo123';
+
+export async function login(req, res) {
+  try {
+    const { email, password } = req.body || {};
+    const e = (email || '').trim().toLowerCase();
+    if (!e) {
+      return res.status(400).json({ success: false, message: 'Email is required.' });
+    }
+    let user = await User.findOne({ email: e });
+    if (!user && e === DEMO_EMAIL && password === DEMO_PASSWORD) {
+      user = await User.create({ email: DEMO_EMAIL, phone: '' });
+    }
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+    }
+    const { passwordHash, ...safe } = user.toObject();
+    return res.json({ success: true, user: safe });
+  } catch (err) {
+    console.error('login error:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Server error.' });
+  }
+}
+
 export async function register(req, res) {
   try {
     const { email, phone } = req.body || {};

@@ -7,6 +7,17 @@ function getHeaders() {
   return headers;
 }
 
+export async function login(email, password) {
+  const res = await fetch(`${API_BASE}/user/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email || '', password: password || '' }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Sign in failed');
+  return json;
+}
+
 export async function register(email, phone) {
   const res = await fetch(`${API_BASE}/user/register`, {
     method: 'POST',

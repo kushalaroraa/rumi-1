@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import express from 'express';
@@ -7,6 +7,7 @@ import { connectDB } from './config/db.js';
 import userRoutes from './routes/userRoutes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 const PORT = process.env.PORT || 4000;
 
 await connectDB();
