@@ -19,6 +19,8 @@ import {
   Sparkles,
   BarChart3,
   Target,
+  MapPin,
+  ShieldCheck,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as userApi from '../../api/userApi.js';
@@ -31,6 +33,7 @@ export function Dashboard({ onLogout, onEditProfile }) {
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [swipeExitDirection, setSwipeExitDirection] = useState('right');
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const [swipeCards, setSwipeCards] = useState([
     {
@@ -267,46 +270,156 @@ export function Dashboard({ onLogout, onEditProfile }) {
                 <span className="absolute top-1 right-1 w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--rumi-destructive)' }} />
               </button>
 
-              <button className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-blue-100">
-                {profileLoading ? (
-                  <div className="w-full h-full bg-gray-200 animate-pulse" />
-                ) : (
-                  <img src={profileImageUrl} alt="Profile" className="w-full h-full object-cover" />
-                )}
-              </button>
-            </div>
-          </div>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setProfileMenuOpen((o) => !o)}
+                  className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-gray-200 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-offset-2"
+                  aria-label="Open profile"
+                >
+                  {profileLoading ? (
+                    <div className="w-full h-full bg-gray-200 animate-pulse" />
+                  ) : (
+                    <img src={profileImageUrl} alt="Profile" className="w-full h-full object-cover" />
+                  )}
+                </button>
 
-          {/* My profile summary from saved data */}
-          {profile && (
-            <div
-              className="mt-4 p-4 rounded-xl"
-              style={{
-                backgroundColor: 'var(--rumi-muted)',
-                border: '1px solid var(--rumi-border)',
-              }}
-            >
-              <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--rumi-foreground)' }}>
-                Your profile
-              </h3>
-              <div className="flex flex-wrap items-center gap-4 text-sm" style={{ color: 'var(--rumi-muted-foreground)' }}>
-                {profile.bio && <span className="max-w-md truncate">{profile.bio}</span>}
-                {profile.age && <span>Age {profile.age}</span>}
-                {profile.gender && <span className="capitalize">{profile.gender.replace('_', ' ')}</span>}
-                {profile.location?.city && (
-                  <span>{[profile.location.city, profile.location.state].filter(Boolean).join(', ')}</span>
-                )}
-                {profile.preferences?.budgetMin != null && profile.preferences?.budgetMax != null && (
-                  <span className="flex items-center gap-1">
-                    <DollarSign size={14} /> ₹{profile.preferences.budgetMin / 1000}k–₹{profile.preferences.budgetMax / 1000}k/mo
-                  </span>
-                )}
-                {profile.trustScore != null && (
-                  <span className="text-emerald-600 font-medium">Trust score: {profile.trustScore}%</span>
-                )}
+                <AnimatePresence>
+                  {profileMenuOpen && (
+                    <>
+                      <button
+                        type="button"
+                        className="fixed inset-0 z-40"
+                        aria-label="Close"
+                        onClick={() => setProfileMenuOpen(false)}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 top-full mt-2 z-50 w-[320px] rounded-2xl shadow-xl overflow-hidden"
+                        style={{
+                          backgroundColor: 'var(--rumi-card, #fff)',
+                          border: '1px solid var(--rumi-border)',
+                        }}
+                      >
+                        <div className="p-4 border-b" style={{ borderColor: 'var(--rumi-border)', backgroundColor: 'var(--rumi-muted)' }}>
+                          <div className="flex items-center justify-between">
+                            <h3 className="font-semibold" style={{ color: 'var(--rumi-foreground)' }}>
+                              Your profile
+                            </h3>
+                            <button
+                              type="button"
+                              onClick={() => setProfileMenuOpen(false)}
+                              className="p-1 rounded-lg hover:opacity-80"
+                              style={{ color: 'var(--rumi-muted-foreground)' }}
+                              aria-label="Close"
+                            >
+                              <X size={18} />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+                          {profile ? (
+                            <>
+                              <div className="flex items-center gap-3">
+                                <div className="w-14 h-14 rounded-full overflow-hidden flex-shrink-0 bg-gray-100">
+                                  <img
+                                    src={profileImageUrl}
+                                    alt=""
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  {profile.age && (
+                                    <p className="text-sm font-medium" style={{ color: 'var(--rumi-foreground)' }}>
+                                      Age {profile.age}
+                                    </p>
+                                  )}
+                                  {profile.gender && (
+                                    <p className="text-sm capitalize" style={{ color: 'var(--rumi-muted-foreground)' }}>
+                                      {profile.gender.replace('_', ' ')}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+
+                              {profile.bio && (
+                                <div>
+                                  <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: 'var(--rumi-muted-foreground)' }}>
+                                    Bio
+                                  </p>
+                                  <p className="text-sm leading-relaxed" style={{ color: 'var(--rumi-foreground)' }}>
+                                    {profile.bio}
+                                  </p>
+                                </div>
+                              )}
+
+                              {(profile.location?.city || profile.location?.state || profile.location?.pincode) && (
+                                <div>
+                                  <p className="text-xs font-medium uppercase tracking-wide mb-1 flex items-center gap-1" style={{ color: 'var(--rumi-muted-foreground)' }}>
+                                    <MapPin size={12} /> Location
+                                  </p>
+                                  <p className="text-sm" style={{ color: 'var(--rumi-foreground)' }}>
+                                    {[profile.location?.city, profile.location?.state, profile.location?.pincode].filter(Boolean).join(', ')}
+                                  </p>
+                                </div>
+                              )}
+
+                              {(profile.preferences?.budgetMin != null || profile.preferences?.budgetMax != null) && (
+                                <div>
+                                  <p className="text-xs font-medium uppercase tracking-wide mb-1 flex items-center gap-1" style={{ color: 'var(--rumi-muted-foreground)' }}>
+                                    <DollarSign size={12} /> Budget
+                                  </p>
+                                  <p className="text-sm" style={{ color: 'var(--rumi-foreground)' }}>
+                                    ₹{profile.preferences?.budgetMin != null ? profile.preferences.budgetMin / 1000 : '?'}k – ₹{profile.preferences?.budgetMax != null ? profile.preferences.budgetMax / 1000 : '?'}k/month
+                                  </p>
+                                </div>
+                              )}
+
+                              {profile.trustScore != null && (
+                                <div className="flex items-center gap-2 p-3 rounded-xl" style={{ backgroundColor: 'var(--rumi-muted)' }}>
+                                  <ShieldCheck size={18} className="text-emerald-600 flex-shrink-0" />
+                                  <div>
+                                    <p className="text-xs font-medium" style={{ color: 'var(--rumi-muted-foreground)' }}>Trust score</p>
+                                    <p className="text-sm font-semibold text-emerald-600">{profile.trustScore}%</p>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-sm" style={{ color: 'var(--rumi-muted-foreground)' }}>
+                              No profile data yet.
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="p-4 border-t" style={{ borderColor: 'var(--rumi-border)', backgroundColor: 'var(--rumi-muted)' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProfileMenuOpen(false);
+                              onEditProfile?.();
+                            }}
+                            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-medium text-sm transition-colors"
+                            style={{
+                              backgroundColor: 'var(--rumi-primary)',
+                              color: 'var(--rumi-primary-foreground)',
+                            }}
+                          >
+                            <Edit size={18} />
+                            Edit profile
+                          </button>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
-          )}
+          </div>
         </header>
 
         <div className="p-8">
