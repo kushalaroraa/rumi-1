@@ -42,6 +42,7 @@ const userSchema = new mongoose.Schema(
     gender: { type: String, enum: ['male', 'female', 'non_binary', 'other', ''], default: '' },
     city: { type: String, trim: true, default: '' },
     profession: { type: String, enum: ['student', 'working', 'WFH', 'hybrid', ''], default: '' },
+    intent: { type: String, enum: ['find', 'offer', 'explore', ''], default: '' },
     budgetRange: {
       min: { type: Number, default: 0 },
       max: { type: Number, default: 0 },

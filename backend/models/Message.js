@@ -10,11 +10,16 @@ const messageSchema = new mongoose.Schema(
     message: { type: String, required: true },
     timestamp: { type: Date, default: Date.now },
     read: { type: Boolean, default: false },
+
+    // Optional room-scoped chat thread.
+    roomId: { type: mongoose.Schema.Types.ObjectId, ref: 'Room', default: null },
   },
   { timestamps: true }
 );
 
 messageSchema.index({ senderId: 1, receiverId: 1, timestamp: -1 });
 messageSchema.index({ receiverId: 1, senderId: 1, timestamp: -1 });
+messageSchema.index({ roomId: 1, senderId: 1, receiverId: 1, timestamp: -1 });
+messageSchema.index({ roomId: 1, receiverId: 1, senderId: 1, timestamp: -1 });
 
 export const Message = mongoose.model('Message', messageSchema);

@@ -92,3 +92,61 @@ export async function uploadProfilePhoto(file: File) {
   });
 }
 
+// Rooms (Offer a Room / Just Exploring)
+export async function createRoom(form: FormData) {
+  return api.post('/rooms', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+}
+
+export async function getRecommendedRooms(limit: number = 5) {
+  return api.get('/rooms/recommended', { params: { limit } });
+}
+
+// --- Offer a Room (room owner dashboard) ---
+
+export async function getMyRooms() {
+  return api.get('/rooms/mine');
+}
+
+export async function updateRoomStatus(roomId: string, status: 'active' | 'paused' | 'rented') {
+  return api.patch(`/rooms/${roomId}/status`, { status });
+}
+
+export async function updateRoom(roomId: string, form: FormData) {
+  return api.put(`/rooms/${roomId}`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+}
+
+export async function deleteRoom(roomId: string) {
+  return api.delete(`/rooms/${roomId}`);
+}
+
+export async function incrementRoomView(roomId: string) {
+  return api.post(`/rooms/${roomId}/view`);
+}
+
+export async function getRoomReceivedRequests(roomId: string) {
+  return api.get('/request/received', { params: { roomId } });
+}
+
+export async function getRoomReceivedAcceptedRequests(roomId: string) {
+  return api.get('/request/received/accepted', { params: { roomId } });
+}
+
+export async function getChatThreads(roomId: string) {
+  return api.get('/chat/threads', { params: { roomId } });
+}
+
+export async function getChatHistoryWithRoom(otherUserId: string, roomId: string) {
+  return api.get('/chat/history', { params: { userId: otherUserId, roomId } });
+}
+
+export async function getRoomSuggestions(roomId: string, limit: number = 10) {
+  return api.get(`/rooms/${roomId}/suggestions`, { params: { limit } });
+}
+
+// Invite to Connect (room-scoped request)
+export async function inviteToConnect(toUserId: string, roomId: string) {
+  return api.post('/request/send', { toUserId, roomId });
+}
+

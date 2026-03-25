@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { 
   Home, 
   Search, 
@@ -45,8 +45,11 @@ import {
   rejectRequest,
   getChatHistory,
   getProfile,
+  getRecommendedRooms,
 } from '../../services/api';
 import { API_BASE_URL } from '../../services/api';
+import { RecommendedRoomsSection } from '../explore/RecommendedRoomsSection';
+import { OfferRoomDashboard } from '../offer/OfferRoomDashboard';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -58,6 +61,9 @@ export const Dashboard = ({ onLogout, userEmail, onEditProfile }: DashboardProps
   const [activeNav, setActiveNav] = useState('dashboard');
   const [selectedMonth, setSelectedMonth] = useState('August 2025');
   const [showLoginNotice, setShowLoginNotice] = useState(false);
+
+  const [renderOfferDashboard, setRenderOfferDashboard] = useState(false);
+  const [intentResolved, setIntentResolved] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [swipeCards, setSwipeCards] = useState<any[]>([]);
@@ -71,6 +77,13 @@ export const Dashboard = ({ onLogout, userEmail, onEditProfile }: DashboardProps
   const [chatLoading, setChatLoading] = useState(false);
 
   const [avatarSrc, setAvatarSrc] = useState<string>('');
+  const [isExploreLocked, setIsExploreLocked] = useState(false);
+  const [recommendedRooms, setRecommendedRooms] = useState<any[]>([]);
+  const [roomsLoading, setRoomsLoading] = useState(false);
+  const [revealExploreMatches, setRevealExploreMatches] = useState(false);
+  const [showExploreProfileModal, setShowExploreProfileModal] = useState(false);
+  const scrollTriggerCountRef = useRef(0);
+  const explorePromptShownRef = useRef(false);
 
   const normalizeImageUrl = (src?: string | null) => {
     if (!src) return '';
@@ -225,9 +238,80 @@ export const Dashboard = ({ onLogout, userEmail, onEditProfile }: DashboardProps
   };
 
   useEffect(() => {
-    reloadDashboard();
+    const run = async () => {
+      const token = localStorage.getItem('rumi_token');
+      if (!token) {
+        setIntentResolved(true);
+        return;
+      }
+
+      try {
+        const res = await getProfile();
+        const u = res?.data?.user;
+
+        if (u?.intent === 'offer') {
+          setRenderOfferDashboard(true);
+          setIntentResolved(true);
+          return;
+        }
+
+        const exploreLocked = u?.intent === 'explore' && !u?.profileCompleted;
+        setIsExploreLocked(Boolean(exploreLocked));
+
+        setRoomsLoading(true);
+        try {
+          const roomsRes = await getRecommendedRooms(10);
+          setRecommendedRooms(roomsRes?.data?.rooms || []);
+        } finally {
+          setRoomsLoading(false);
+        }
+
+        if (exploreLocked) {
+          setSwipeCards([]);
+          setRequestsReceived([]);
+          setSentRequests([]);
+          setActiveMatches([]);
+        } else {
+          reloadDashboard();
+        }
+        setIntentResolved(true);
+      } catch {
+        reloadDashboard();
+        setIntentResolved(true);
+      }
+    };
+
+    run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // In "Just Exploring" mode we start with room recommendations only.
+  // After a few scrolls, we reveal matching profiles and show a full-screen lock prompt.
+  useEffect(() => {
+    if (!isExploreLocked) {
+      scrollTriggerCountRef.current = 0;
+      explorePromptShownRef.current = false;
+      setRevealExploreMatches(false);
+      setShowExploreProfileModal(false);
+      return;
+    }
+
+    const onScroll = () => {
+      if (explorePromptShownRef.current) return;
+      scrollTriggerCountRef.current += 1;
+
+      // "After a few scrolls"
+      if (scrollTriggerCountRef.current >= 4) {
+        explorePromptShownRef.current = true;
+        setRevealExploreMatches(true);
+        setShowExploreProfileModal(true);
+        reloadDashboard();
+      }
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [isExploreLocked]);
 
   useEffect(() => {
     // Load user avatar from localStorage so navbar matches the logged-in account.
@@ -302,6 +386,24 @@ export const Dashboard = ({ onLogout, userEmail, onEditProfile }: DashboardProps
     { icon: Edit, label: 'Edit Preferences', color: 'purple' },
     { icon: User, label: 'Complete Profile', color: 'green' }
   ];
+
+  if (!intentResolved) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-gray-500">Loading dashboard...</div>
+      </div>
+    );
+  }
+
+  if (renderOfferDashboard) {
+    return (
+      <OfferRoomDashboard
+        onLogout={onLogout}
+        userEmail={userEmail}
+        onEditProfile={onEditProfile}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 flex">
@@ -502,89 +604,112 @@ export const Dashboard = ({ onLogout, userEmail, onEditProfile }: DashboardProps
             <div className="lg:col-span-2">
               <div className="bg-white rounded-3xl p-8 shadow-sm">
                 <div className="mb-6">
-                  <h2 className="text-2xl font-semibold text-gray-900 mb-1">Discover Matches</h2>
-                  <p className="text-gray-500">Swipe right to connect, left to pass.</p>
+                  {isExploreLocked && !revealExploreMatches ? (
+                    <>
+                      <h2 className="text-2xl font-semibold text-gray-900 mb-1">
+                        Here are rooms you might like
+                      </h2>
+                      <p className="text-gray-500">
+                        Complete your profile to unlock matching.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h2 className="text-2xl font-semibold text-gray-900 mb-1">Discover Matches</h2>
+                      <p className="text-gray-500">Swipe right to connect, left to pass.</p>
+                    </>
+                  )}
                 </div>
 
                 {/* Swipe Card Stack */}
-                <div className="relative h-[600px] flex items-center justify-center">
-                  <AnimatePresence>
-                    {loading ? (
-                      <div className="text-center text-gray-400">
-                        <Users size={64} className="mx-auto mb-4 opacity-50" />
-                        <p className="text-lg">Loading matches…</p>
-                      </div>
-                    ) : swipeCards.length > 0 ? (
-                      swipeCards.map((card, index) => (
-                        index < 3 && (
-                          <motion.div
-                            key={card.id}
-                            className="absolute w-full max-w-md"
-                            style={{
-                              zIndex: swipeCards.length - index,
-                            }}
-                            initial={index === 0 ? { scale: 1, y: 0, opacity: 1 } : { scale: 0.95 - (index * 0.05), y: index * 10, opacity: 1 - (index * 0.3) }}
-                            animate={{ scale: 1 - (index * 0.05), y: index * 10, opacity: 1 - (index * 0.3) }}
-                            exit={{ x: 1000, opacity: 0, rotate: 45 }}
-                            transition={{ duration: 0.3 }}
-                          >
-                            <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
-                              {/* Profile Image */}
-                              <div className="relative h-80">
-                                <img
-                                  src={card.image}
-                                  alt={card.name}
-                                  className="w-full h-full object-cover"
-                                />
-                                {/* Match Badge */}
-                                <div className="absolute top-4 right-4 bg-emerald-500 text-white px-4 py-2 rounded-full font-semibold text-sm shadow-lg">
-                                  {card.match}% Match
-                                </div>
-                              </div>
+                  {(!isExploreLocked || revealExploreMatches) && (
+                    <div className="relative h-[600px] flex items-center justify-center">
+                      <AnimatePresence>
+                        {loading ? (
+                          <div className="text-center text-gray-400">
+                            <Users size={64} className="mx-auto mb-4 opacity-50" />
+                            <p className="text-lg">Loading matches…</p>
+                          </div>
+                        ) : swipeCards.length > 0 ? (
+                          swipeCards.map((card, index) => (
+                            index < 3 && (
+                              <motion.div
+                                key={card.id}
+                                className="absolute w-full max-w-md"
+                                style={{
+                                  zIndex: swipeCards.length - index,
+                                }}
+                                initial={
+                                  index === 0
+                                    ? { scale: 1, y: 0, opacity: 1 }
+                                    : { scale: 0.95 - index * 0.05, y: index * 10, opacity: 1 - index * 0.3 }
+                                }
+                                animate={{
+                                  scale: 1 - index * 0.05,
+                                  y: index * 10,
+                                  opacity: 1 - index * 0.3,
+                                }}
+                                exit={{ x: 1000, opacity: 0, rotate: 45 }}
+                                transition={{ duration: 0.3 }}
+                              >
+                                <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
+                                  {/* Profile Image */}
+                                  <div className="relative h-80">
+                                    <img
+                                      src={card.image}
+                                      alt={card.name}
+                                      className="w-full h-full object-cover"
+                                    />
+                                    {/* Match Badge */}
+                                    <div className="absolute top-4 right-4 bg-emerald-500 text-white px-4 py-2 rounded-full font-semibold text-sm shadow-lg">
+                                      {card.match}% Match
+                                    </div>
+                                  </div>
 
-                              {/* Profile Details */}
-                              <div className="p-6">
-                                <h3 className="text-2xl font-semibold text-gray-900 mb-1">
-                                  {card.name}, {card.age}
-                                </h3>
-                                <p className="text-gray-600 mb-4 leading-relaxed">
-                                  {card.bio}
-                                </p>
+                                  {/* Profile Details */}
+                                  <div className="p-6">
+                                    <h3 className="text-2xl font-semibold text-gray-900 mb-1">
+                                      {card.name}, {card.age}
+                                    </h3>
+                                    <p className="text-gray-600 mb-4 leading-relaxed">
+                                      {card.bio}
+                                    </p>
 
-                                {/* Lifestyle Tags */}
-                                <div className="flex flex-wrap gap-2 mb-4">
-                                  {card.tags.map((tag, i) => (
-                                    <span
-                                      key={i}
-                                      className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-sm font-medium"
-                                    >
-                                      {tag}
-                                    </span>
-                                  ))}
-                                </div>
+                                    {/* Lifestyle Tags */}
+                                    <div className="flex flex-wrap gap-2 mb-4">
+                                      {card.tags.map((tag, i) => (
+                                        <span
+                                          key={i}
+                                          className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-sm font-medium"
+                                        >
+                                          {tag}
+                                        </span>
+                                      ))}
+                                    </div>
 
-                                {/* Budget */}
-                                <div className="flex items-center gap-2 text-gray-700">
-                                  <DollarSign size={20} className="text-blue-600" />
-                                  <span className="font-semibold">Budget: ₹{card.budget}k/month</span>
+                                    {/* Budget */}
+                                    <div className="flex items-center gap-2 text-gray-700">
+                                      <DollarSign size={20} className="text-blue-600" />
+                                      <span className="font-semibold">Budget: ₹{card.budget}k/month</span>
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
-                            </div>
-                          </motion.div>
-                        )
-                      ))
-                    ) : (
-                      <div className="text-center text-gray-400">
-                        <Users size={64} className="mx-auto mb-4 opacity-50" />
-                        <p className="text-lg">No more profiles to show</p>
-                        <p className="text-sm">Check back later for new matches!</p>
-                      </div>
-                    )}
-                  </AnimatePresence>
-                </div>
+                              </motion.div>
+                            )
+                          ))
+                        ) : (
+                          <div className="text-center text-gray-400">
+                            <Users size={64} className="mx-auto mb-4 opacity-50" />
+                            <p className="text-lg">No more profiles to show</p>
+                            <p className="text-sm">Check back later for new matches!</p>
+                          </div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
 
                 {/* Action Buttons */}
-                {swipeCards.length > 0 && (
+                {(!isExploreLocked || revealExploreMatches) && !showExploreProfileModal && swipeCards.length > 0 && (
                   <div className="flex items-center justify-center gap-6 mt-8">
                     <button
                       onClick={() => handleSwipe('left')}
@@ -602,6 +727,13 @@ export const Dashboard = ({ onLogout, userEmail, onEditProfile }: DashboardProps
                     </button>
                   </div>
                 )}
+
+                {/* Recommended Rooms */}
+                <RecommendedRoomsSection
+                  rooms={recommendedRooms}
+                  loading={roomsLoading}
+                  title="Recommended Rooms"
+                />
               </div>
             </div>
 
@@ -887,6 +1019,29 @@ export const Dashboard = ({ onLogout, userEmail, onEditProfile }: DashboardProps
           </div>
         </div>
       </main>
+
+      {/* Full-screen lock prompt for explore mode */}
+      {showExploreProfileModal && (
+        <div className="fixed inset-0 z-[200] bg-black/60 flex items-center justify-center p-6">
+          <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-xl text-center">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+              Want better matches?
+            </h2>
+            <p className="text-gray-600 mb-6">Complete your profile.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setShowExploreProfileModal(false);
+                onEditProfile?.();
+              }}
+              className="w-full py-3.5 px-4 bg-[#081A35] text-white rounded-xl font-semibold hover:bg-[#081A35]/90 transition-all shadow-lg"
+            >
+              Complete Profile
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

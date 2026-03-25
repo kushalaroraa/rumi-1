@@ -34,7 +34,7 @@ export function registerChatHandlers(io) {
     socket.join(room);
 
     socket.on('message', async (payload) => {
-      const { receiverId, message } = payload || {};
+      const { receiverId, message, roomId } = payload || {};
       if (!receiverId || !message?.trim()) {
         socket.emit('error', { message: 'receiverId and message required.' });
         return;
@@ -45,11 +45,18 @@ export function registerChatHandlers(io) {
       }
 
       const accepted = await Request.findOne({
-        $or: [
-          { fromUserId: userId, toUserId: receiverId },
-          { fromUserId: receiverId, toUserId: userId },
+        $and: [
+          {
+            $or: [
+              { fromUserId: userId, toUserId: receiverId },
+              { fromUserId: receiverId, toUserId: userId },
+            ],
+          },
+          { status: 'accepted' },
+          ...(roomId
+            ? [{ roomId: String(roomId) }]
+            : [{ $or: [{ roomId: null }, { roomId: { $exists: false } }] }]),
         ],
-        status: 'accepted',
       });
       if (!accepted) {
         socket.emit('error', { message: 'Not connected. Accept the request first.' });
@@ -60,6 +67,7 @@ export function registerChatHandlers(io) {
         senderId: userId,
         receiverId: receiverId,
         message: message.trim(),
+        roomId: roomId ? String(roomId) : null,
       });
 
       const receiverRoom = `user:${receiverId}`;
@@ -69,6 +77,7 @@ export function registerChatHandlers(io) {
         receiverId: doc.receiverId,
         message: doc.message,
         timestamp: doc.timestamp,
+        roomId: doc.roomId,
       });
       socket.emit('message_sent', { _id: doc._id });
     });

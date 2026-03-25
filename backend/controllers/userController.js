@@ -30,6 +30,7 @@ export async function updateProfile(req, res) {
     const allowed = [
       'name', 'age', 'gender', 'city', 'profession', 'budgetRange', 'bio', 'photo',
       'lifestylePreferences', 'verificationStatus', 'location', 'profilePicture', 'profileCompleted',
+      'intent',
     ];
     const updates = {};
     for (const key of allowed) {

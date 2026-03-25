@@ -1655,7 +1655,8 @@ export default function App() {
         const user = res?.data?.user;
         if (!user) throw new Error('Missing profile');
 
-        if (user?.profileCompleted) setCurrentView('dashboard');
+        const shouldShowDashboard = user?.profileCompleted || user?.intent === 'explore';
+        if (shouldShowDashboard) setCurrentView('dashboard');
         else setCurrentView('profile');
       } catch (e) {
         localStorage.removeItem('rumi_token');
@@ -1737,6 +1738,7 @@ export default function App() {
       <div className="w-full font-sans selection:bg-blue-200">
         <FontStyles />
         <ProfileSetupFlow 
+          mode={profileFlowMode}
           onComplete={() => setCurrentView(profileFlowMode === 'edit' ? 'dashboard' : 'confirmation')} 
         />
       </div>

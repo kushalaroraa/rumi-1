@@ -56,5 +56,14 @@
     server: {
       port: 3000,
       open: true,
+      proxy: {
+        // Frontend uses `VITE_API_URL=/api` (see `src/services/api.ts`), so
+        // map `/api/*` -> backend `/*` to avoid 404s.
+        '/api': {
+          target: 'http://localhost:4000',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api/, ''),
+        },
+      },
     },
   });

@@ -1,6 +1,8 @@
 import { Request } from '../models/Request.js';
 import { User } from '../models/User.js';
 import { calculateMatch } from '../services/matchingService.js';
+import { Room } from '../models/Room.js';
+import { calculateRoomCompatibility } from '../services/roomMatchingService.js';
 
 /**
  * POST /request/send
@@ -9,7 +11,7 @@ import { calculateMatch } from '../services/matchingService.js';
 export async function sendRequest(req, res) {
   try {
     const fromUserId = req.userId;
-    const { toUserId } = req.body || {};
+    const { toUserId, roomId } = req.body || {};
     if (!toUserId) {
       return res.status(400).json({ success: false, message: 'toUserId required.' });
     }
@@ -21,11 +23,25 @@ export async function sendRequest(req, res) {
     if (!toUser) {
       return res.status(404).json({ success: false, message: 'User not found.' });
     }
+
+    let room = null;
+    const roomIdStr = roomId ? String(roomId) : null;
+    if (roomIdStr) {
+      room = await Room.findById(roomIdStr);
+      if (!room) return res.status(404).json({ success: false, message: 'Room not found.' });
+      if (room.ownerUserId?.toString?.() !== toUserId.toString()) {
+        return res.status(403).json({ success: false, message: 'Room does not belong to recipient.' });
+      }
+    }
     if ((toUser.blockedUsers || []).some(id => id.toString() === fromUserId.toString())) {
       return res.status(403).json({ success: false, message: 'Cannot send request.' });
     }
 
-    const existing = await Request.findOne({ fromUserId, toUserId });
+    const existing = await Request.findOne({
+      fromUserId,
+      toUserId,
+      roomId: roomIdStr || null,
+    });
     if (existing) {
       if (existing.status === 'pending') {
         return res.status(409).json({ success: false, message: 'Request already sent.' });
@@ -36,7 +52,7 @@ export async function sendRequest(req, res) {
     }
 
     const doc = await Request.findOneAndUpdate(
-      { fromUserId, toUserId },
+      { fromUserId, toUserId, roomId: roomIdStr || null },
       { $set: { status: 'pending', respondedAt: null } },
       { new: true, upsert: true }
     ).populate('toUserId', 'name age city photo profilePicture');
@@ -47,17 +63,18 @@ export async function sendRequest(req, res) {
       fromUserId: toUserId,
       toUserId: fromUserId,
       status: 'pending',
+      roomId: roomIdStr || null,
     });
 
     if (reversePending) {
       await Promise.all([
         Request.findOneAndUpdate(
-          { fromUserId, toUserId },
+          { fromUserId, toUserId, roomId: roomIdStr || null },
           { $set: { status: 'accepted', respondedAt: new Date() } },
           { new: true }
         ),
         Request.findOneAndUpdate(
-          { fromUserId: toUserId, toUserId: fromUserId },
+          { fromUserId: toUserId, toUserId: fromUserId, roomId: roomIdStr || null },
           { $set: { status: 'accepted', respondedAt: new Date() } },
           { new: true }
         ),
@@ -91,7 +108,7 @@ export async function sendRequest(req, res) {
 export async function passRequest(req, res) {
   try {
     const fromUserId = req.userId;
-    const { toUserId } = req.body || {};
+    const { toUserId, roomId } = req.body || {};
     if (!toUserId) {
       return res.status(400).json({ success: false, message: 'toUserId required.' });
     }
@@ -108,8 +125,19 @@ export async function passRequest(req, res) {
       return res.status(403).json({ success: false, message: 'Cannot pass request.' });
     }
 
+    const roomIdStr = roomId ? String(roomId) : null;
+
+    // If this is a room-scoped request, ensure the room belongs to the recipient.
+    if (roomIdStr) {
+      const room = await Room.findById(roomIdStr);
+      if (!room) return res.status(404).json({ success: false, message: 'Room not found.' });
+      if (room.ownerUserId?.toString?.() !== toUserId.toString()) {
+        return res.status(403).json({ success: false, message: 'Room does not belong to recipient.' });
+      }
+    }
+
     const doc = await Request.findOneAndUpdate(
-      { fromUserId, toUserId },
+      { fromUserId, toUserId, roomId: roomIdStr || null },
       { $set: { status: 'rejected', respondedAt: new Date() } },
       { new: true, upsert: true }
     ).populate('toUserId', 'name age city photo profilePicture');
@@ -132,12 +160,16 @@ export async function passRequest(req, res) {
 export async function acceptRequest(req, res) {
   try {
     const toUserId = req.userId;
-    const { requestId, fromUserId } = req.body || {};
+    const { requestId, fromUserId, roomId } = req.body || {};
     let query = { toUserId, status: 'pending' };
     if (requestId) query._id = requestId;
     else if (fromUserId) query.fromUserId = fromUserId;
     else {
       return res.status(400).json({ success: false, message: 'requestId or fromUserId required.' });
+    }
+
+    if (roomId && !requestId) {
+      query.roomId = String(roomId) || null;
     }
 
     const doc = await Request.findOneAndUpdate(
@@ -166,12 +198,16 @@ export async function acceptRequest(req, res) {
 export async function rejectRequest(req, res) {
   try {
     const toUserId = req.userId;
-    const { requestId, fromUserId } = req.body || {};
+    const { requestId, fromUserId, roomId } = req.body || {};
     let query = { toUserId, status: 'pending' };
     if (requestId) query._id = requestId;
     else if (fromUserId) query.fromUserId = fromUserId;
     else {
       return res.status(400).json({ success: false, message: 'requestId or fromUserId required.' });
+    }
+
+    if (roomId && !requestId) {
+      query.roomId = String(roomId) || null;
     }
 
     const doc = await Request.findOneAndUpdate(
@@ -203,7 +239,16 @@ export async function receivedRequests(req, res) {
       'city profession budgetRange lifestylePreferences location'
     );
 
-    const list = await Request.find({ toUserId: req.userId, status: 'pending' })
+    const roomId = req.query?.roomId ? String(req.query.roomId) : null;
+    const roomFilter = roomId
+      ? { roomId: roomId }
+      : { $or: [{ roomId: null }, { roomId: { $exists: false } }] };
+
+    const list = await Request.find({
+      toUserId: req.userId,
+      status: 'pending',
+      ...roomFilter,
+    })
       .populate(
         'fromUserId',
         'name age city photo profilePicture bio budgetRange profession lifestylePreferences'
@@ -211,8 +256,28 @@ export async function receivedRequests(req, res) {
       .sort({ createdAt: -1 })
       .lean();
 
+    let room = null;
+    if (roomId) {
+      const r = await Room.findById(roomId).lean();
+      if (!r || r.ownerUserId?.toString?.() !== req.userId.toString()) {
+        return res.status(403).json({ success: false, message: 'Not allowed for this room.' });
+      }
+      room = r;
+    }
+
     const enriched = list.map((r) => {
       const other = r.fromUserId || {};
+
+      if (room) {
+        const compatibility = calculateRoomCompatibility(room, other);
+        return {
+          ...r,
+          matchScore: compatibility,
+          match: compatibility,
+          compatibility,
+        };
+      }
+
       const { matchScore, reasons } = calculateMatch(currentUser?.toObject?.() || currentUser, other);
       return {
         ...r,
@@ -240,7 +305,16 @@ export async function receivedAcceptedRequests(req, res) {
       'city profession budgetRange lifestylePreferences location'
     );
 
-    const list = await Request.find({ toUserId: req.userId, status: 'accepted' })
+    const roomId = req.query?.roomId ? String(req.query.roomId) : null;
+    const roomFilter = roomId
+      ? { roomId: roomId }
+      : { $or: [{ roomId: null }, { roomId: { $exists: false } }] };
+
+    const list = await Request.find({
+      toUserId: req.userId,
+      status: 'accepted',
+      ...roomFilter,
+    })
       .populate(
         'fromUserId',
         'name age city photo profilePicture bio budgetRange profession lifestylePreferences'
@@ -248,8 +322,28 @@ export async function receivedAcceptedRequests(req, res) {
       .sort({ createdAt: -1 })
       .lean();
 
+    let room = null;
+    if (roomId) {
+      const r = await Room.findById(roomId).lean();
+      if (!r || r.ownerUserId?.toString?.() !== req.userId.toString()) {
+        return res.status(403).json({ success: false, message: 'Not allowed for this room.' });
+      }
+      room = r;
+    }
+
     const enriched = list.map((r) => {
       const other = r.fromUserId || {};
+
+      if (room) {
+        const compatibility = calculateRoomCompatibility(room, other);
+        return {
+          ...r,
+          matchScore: compatibility,
+          match: compatibility,
+          compatibility,
+        };
+      }
+
       const { matchScore, reasons } = calculateMatch(currentUser?.toObject?.() || currentUser, other);
       return {
         ...r,
@@ -277,7 +371,15 @@ export async function sentRequests(req, res) {
       'city profession budgetRange lifestylePreferences location'
     );
 
-    const list = await Request.find({ fromUserId: req.userId })
+    const roomId = req.query?.roomId ? String(req.query.roomId) : null;
+    const roomFilter = roomId
+      ? { roomId: roomId }
+      : { $or: [{ roomId: null }, { roomId: { $exists: false } }] };
+
+    const list = await Request.find({
+      fromUserId: req.userId,
+      ...roomFilter,
+    })
       .populate(
         'toUserId',
         'name age city photo profilePicture bio budgetRange profession lifestylePreferences'
@@ -285,8 +387,25 @@ export async function sentRequests(req, res) {
       .sort({ createdAt: -1 })
       .lean();
 
+    let room = null;
+    if (roomId) {
+      const r = await Room.findById(roomId).lean();
+      room = r && r.ownerUserId?.toString?.() === req.userId.toString() ? r : null;
+    }
+
     const enriched = list.map((r) => {
       const other = r.toUserId || {};
+
+      if (room) {
+        const compatibility = calculateRoomCompatibility(room, other);
+        return {
+          ...r,
+          matchScore: compatibility,
+          match: compatibility,
+          compatibility,
+        };
+      }
+
       const { matchScore, reasons } = calculateMatch(currentUser?.toObject?.() || currentUser, other);
       return {
         ...r,

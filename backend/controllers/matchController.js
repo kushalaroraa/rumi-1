@@ -22,9 +22,14 @@ export async function getMatches(req, res) {
       profileCompleted: true,
     }).select('-passwordHash -otpCode -otpExpiresAt');
 
+    // For explore/matches we only consider legacy user-to-user requests
+    // (i.e. requests without a roomId).
     const acceptedOrPending = await Request.find({
-      $or: [{ fromUserId: userId }, { toUserId: userId }],
-      status: { $in: ['accepted', 'pending', 'rejected'] },
+      $and: [
+        { $or: [{ fromUserId: userId }, { toUserId: userId }] },
+        { status: { $in: ['accepted', 'pending', 'rejected'] } },
+        { $or: [{ roomId: null }, { roomId: { $exists: false } }] },
+      ],
     }).select('fromUserId toUserId').lean();
     const acceptedOrPendingWith = new Set([userId.toString()]);
     for (const r of acceptedOrPending) {
